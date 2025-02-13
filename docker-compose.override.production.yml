@@ -1,0 +1,52 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Whatsapp.Clone/Dockerfile
+      args:
+        - API_PORT=${API_PORT}
+    ports:
+      - "${API_PORT}"
+    environment:
+      - Kestrel__Endpoints__Http__Url=http://*:${API_PORT}
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=${POSTGRES_PORT};Database=ChatDb;User ID=root;Password=${POSTGRES_PASSWORD};Pooling=true;
+      - ConnectionStrings__ChatConnection=mongodb://mongodb:${MONGODB_PORT}
+      - ConnectionStrings__BackplaneConnection=redis,port:${REDIS_PORT},password=${REDIS_PASSWORD}
+      - ChatHub=${APP_CHATHUB}
+      - CorsOrigins__0=${FRONTEND_URL}:${FRONTEND_PORT}
+      - CorsOrigins__1=${LOADBALANCER_URL}:${LOADBALANCER_PORT}
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+    deploy:
+      replicas: 2
+    networks:
+      - whatsapp
+
+  loadbalancer:
+    container_name: loadbalancer
+    build: ./nginx
+    ports:
+      - ${LOADBALANCER_PORT}:8000
+    environment:
+      - API_PORT=${API_PORT}
+    depends_on:
+      - api
+    networks:
+      - whatsapp
+
+  frontend:
+    container_name: frontend
+    build:
+      context: ./Whatsapp.Clone.App
+      args:
+          - VITE_API=${LOADBALANCER_URL}:${LOADBALANCER_PORT}
+          - VITE_CHATHUB=${APP_CHATHUB}
+    ports:
+      - ${FRONTEND_PORT}:5173
+    depends_on:
+      - loadbalancer
+    networks:
+      - whatsapp
